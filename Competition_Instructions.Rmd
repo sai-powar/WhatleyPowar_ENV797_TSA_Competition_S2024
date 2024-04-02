@@ -1,6 +1,6 @@
 ---
 title: "TSA: Forecasting Competition Instructions"
-author: "Luana Lima"
+author: "Sai Powar & Vinny Whatley"
 date: "03/20/2024"
 output: pdf_document
 always_allow_html: true
