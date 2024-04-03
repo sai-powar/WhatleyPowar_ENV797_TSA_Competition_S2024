@@ -10,6 +10,10 @@ editor_options:
     wrap: sentence
 ---
 
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(echo = TRUE,tidy.opts=list(width.cutoff=80), tidy=FALSE) 
+```
+
 ## CREATE A REPOSITORY IN YOUR GITHUB ACCOUNT
 
 1. Go to your user account on GitHub an navigate to the repositories tab. 
@@ -42,6 +46,41 @@ Your goal is to forecast **daily** load for July 2011 based on this historical d
 ## WRANGLE/PROCESS THE DATASET
 
 You will need to transform hourly data into daily data. See the Rmd file from Lesson 11 for instruction on how to aggregate your dataset using pipes. You should take the **average** of the 24 hours to obtain the daily averages.
+
+```{r package, message=FALSE}
+library(lubridate)
+library(ggplot2)
+library(forecast)  
+library(Kendall)
+library(tseries)
+library(outliers)
+library(tidyverse)
+
+#install.packages("smooth")
+library(smooth)
+```
+
+```{r}
+#importing datasets
+
+raw_load <- read.csv(file="./Data_TOPOST/load.csv", header = TRUE, dec = ".", sep=",") #na.strings = c("","NA")) 
+raw_temp <- read.csv(file="./Data_TOPOST/temperature.csv", header = TRUE, dec = ".", sep=",")
+raw_humidity <- read.csv(file="./Data_TOPOST/relative_humidity.csv", header = TRUE, dec = ".", sep=",")
+
+#cleaning dataset
+raw_load <- raw_load[,-1]
+load<- raw_load %?%
+
+load <-
+  raw_load %>%
+  drop_na() %>%
+  mutate(date = mdy(date))%>%
+  group_by(h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h22, h23, h24)%>%
+  summarise(daily_load=mean(load))
+
+raw_load_2 <- drop_na(raw_load)
+raw_load %>% drop_na()
+```
 
 ## CREATE A TIME SERIES OBJECT
 
