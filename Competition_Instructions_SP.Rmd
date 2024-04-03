@@ -71,22 +71,37 @@ raw_humidity <- read.csv(file="./Data_TOPOST/relative_humidity.csv", header = TR
 raw_load <- raw_load[,-1]
 
 #cleaning more and calculating daily averages
-load<- raw_load %>%
+raw_load_2<- raw_load %>%
   drop_na() %>%
   mutate(date = mdy(date)) %>%
-  mutate_at(2:25, ~ as.numeric(.)) %>%
-  mutate(daily_load = rowMeans(load[,2:25], na.rm=TRUE))
+  mutate_at(2:25, ~ as.numeric(.))
+
+load <- raw_load_2 %>%
+  mutate(daily_load = rowMeans(raw_load_2[,2:25], na.rm=TRUE))
+
+load <- load[,c(1,26)]
 
 #cleaning and calculating daily temp averages
-temp <- raw_temp %>%
+raw_temp_2 <- raw_temp %>%
   drop_na() %>%
-  #mutate(date = mdy(date)) %>%
+  mutate(date = dmy(date)) %>%
   mutate_at(3:30, ~ as.numeric(.))
-  group_by(date,hr)%>%
-  summarise(hourly_temp=mean(load[,3:30]))
 
+temp <- raw_temp_2%>%
+  mutate(hourly_avg = rowMeans(raw_temp_2[,3:30], na.rm=TRUE))%>%
+  group_by(date) %>%
+  summarise(daily_temp=mean(hourly_avg))
 
+#cleaning and calculating daily humidity
+raw_humidity_2 <- raw_humidity %>%
+  drop_na() %>%
+  mutate(date = dmy(date)) %>%
+  mutate_at(3:30, ~ as.numeric(.))
 
+humidity <- raw_humidity_2%>%
+  mutate(hourly_avg = rowMeans(raw_humidity_2[,3:30], na.rm=TRUE))%>%
+  group_by(date) %>%
+  summarise(daily_humidity=mean(hourly_avg))
 
 ```
 
