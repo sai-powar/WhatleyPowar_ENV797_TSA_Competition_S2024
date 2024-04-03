@@ -67,19 +67,27 @@ raw_load <- read.csv(file="./Data_TOPOST/load.csv", header = TRUE, dec = ".", se
 raw_temp <- read.csv(file="./Data_TOPOST/temperature.csv", header = TRUE, dec = ".", sep=",")
 raw_humidity <- read.csv(file="./Data_TOPOST/relative_humidity.csv", header = TRUE, dec = ".", sep=",")
 
-#cleaning dataset
+#cleaning load dataset
 raw_load <- raw_load[,-1]
-load<- raw_load %?%
 
-load <-
-  raw_load %>%
+#cleaning more and calculating daily averages
+load<- raw_load %>%
   drop_na() %>%
-  mutate(date = mdy(date))%>%
-  group_by(h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h22, h23, h24)%>%
-  summarise(daily_load=mean(load))
+  mutate(date = mdy(date)) %>%
+  mutate_at(2:25, ~ as.numeric(.)) %>%
+  mutate(daily_load = rowMeans(load[,2:25], na.rm=TRUE))
 
-raw_load_2 <- drop_na(raw_load)
-raw_load %>% drop_na()
+#cleaning and calculating daily temp averages
+temp <- raw_temp %>%
+  drop_na() %>%
+  #mutate(date = mdy(date)) %>%
+  mutate_at(3:30, ~ as.numeric(.))
+  group_by(date,hr)%>%
+  summarise(hourly_temp=mean(load[,3:30]))
+
+
+
+
 ```
 
 ## CREATE A TIME SERIES OBJECT
