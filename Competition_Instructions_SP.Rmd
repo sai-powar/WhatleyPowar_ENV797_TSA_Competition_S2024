@@ -148,7 +148,7 @@ You may use different forecasting windows for model selection. For example you m
 ```{r}
 
 #forecasting june 2011
-Model1_for_jun <- forecast(Model1, h=30)
+Model1_for_jun <- forecast(Model1_train, h=30)
 plot(Model1_for_jun)
 
 #checking models
