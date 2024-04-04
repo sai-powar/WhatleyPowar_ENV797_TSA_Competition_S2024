@@ -168,7 +168,7 @@ Just for the good/selected model(s) you will **re-run** the model but now using 
 Model1_all <-auto.arima(ts_load)
 
 #forecasting july 2011
-Model1_for_jul <- forecast(Model1_all, h=30)
+Model1_for_jul <- forecast(Model1_all, h=31)
 print(Model1_for_jul$mean)
 
 ```
@@ -176,6 +176,18 @@ print(Model1_for_jul$mean)
 ## CREATE AN EXCEL FILE WITH FORECAST
 
 Look at the excel file in your Output folder name "submission_template.csv". You will need to create your own output file with forecast for July 2011. Your file needs to be in the format of the submission template. If your forecast is a probability distribution function, consider the mean to be the point forecast.
+
+```{r}
+#creating date dataframe
+date_for <- seq(from=as.Date("07-01-2011", format="%m-%d-%Y"), to=as.Date("07-31-2011",format="%m-%d-%Y"),by="1 day")
+date_for <- as.data.frame(date_for)
+colnames(date_for)="date"
+
+#creating forecast csv
+arima_for <- data.frame(date=date_for,load=round(Model1_for_jul$mean,digits=0))
+write.csv(arima_for, file="./Output/submission_arima.csv", row.names = FALSE)
+
+```
 
 ## SUBMIT FORECAST TO KAGGLE
 
