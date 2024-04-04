@@ -109,9 +109,35 @@ humidity <- raw_humidity_2%>%
 
 After you process your dataset use the `msts()` function to create a time series object. You need to use `msts()` instead of `ts()` because your daily data will have more than one seasonal component.After you process your dataset use the `msts()` function to create a time series object.
 
+```{r}
+# Create a time series object using msts()
+ts_load <- msts(load$daily_load, seasonal.periods = c(7,365.25), start = c(2005,1,1))
+head(ts_load)
+
+ts_temp <- msts(temp$daily_temp, seasonal.periods = c(7,365.25), start = c(2005,1,1))
+
+ts_humidity <- msts(humidity$daily_humidity, seasonal.periods = c(7,365.25), start = c(2005,1,1))
+```
+
+
 ## FIT MODELS TO YOUR DATA
 
 Fit models to your dataset considering the period Jan 1st 2005 to May 31st 2011. 
+
+```{r}
+
+#creating subset for training purposes
+
+n_for = 30
+
+ts_load_train <- subset(ts_load,end = length(ts_load)-n_for)
+ts_load_test <- subset(ts_load,start= length(ts_load)-n_for+1)
+
+#ARIMA model for training (Jan 1st 2005 to May 31st 2011)
+
+Model1_train<-auto.arima(ts_load_train)
+
+```
 
 ## FORECAST DAILY DEMAND FOR JUNE 2011 
 
@@ -119,9 +145,33 @@ Using the models from previous section, forecast daily demand for the period Jun
 
 You may use different forecasting windows for model selection. For example you might want to see the model behavior when forecasting July of 2010. 
 
+```{r}
+
+#forecasting june 2011
+Model1_for_jun <- forecast(Model1, h=30)
+plot(Model1_for_jun)
+
+#checking models
+autoplot(ts_load,series="Original")+
+  autolayer(Model1_train$fitted,series="SARIMA Model 1")+
+  autolayer(Model1_for_jun$mean,series = "SARIMA Model 1 forecast")
+  #xlim(2010,NA)
+
+```
+
 ## FORECAST DAILY DEMAND FOR JULY 2011
 
 Just for the good/selected model(s) you will **re-run** the model but now using the entire dataset all the way to June 30th 2011. Then forecast Jan 1st 2011 to Jan 31st 2011.
+
+```{r}
+#fitting model to entire dataset
+Model1_all <-auto.arima(ts_load)
+
+#forecasting july 2011
+Model1_for_jul <- forecast(Model1_all, h=30)
+print(Model1_for_jul$mean)
+
+```
 
 ## CREATE AN EXCEL FILE WITH FORECAST
 
