@@ -1,0 +1,223 @@
+---
+title: "TSA: Forecasting Competition Instructions"
+author: "Sai Powar & Vinny Whatley"
+date: "03/20/2024"
+output: pdf_document
+always_allow_html: true
+editor_options: 
+  chunk_output_type: console
+  markdown: 
+    wrap: sentence
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(echo = TRUE,tidy.opts=list(width.cutoff=80), tidy=FALSE) 
+```
+
+## CREATE A REPOSITORY IN YOUR GITHUB ACCOUNT
+
+1. Go to your user account on GitHub an navigate to the repositories tab. 
+
+3. In the upper right corner, click the green "New" button. 
+
+4. Name your repository with recommended naming conventions (suggestion: *Lastname1Lastname2_ENV797_TSA_Competition_S2024*). Write a short description of the purpose of the repository. Check the box to initialize the repository with a README. Add a .gitignore for R and add a GNU General Public License v3.0.
+
+5. Invite other group members as collaborators to the repository.
+
+## LINK YOUR REPO TO YOUR LOCAL DRIVE WITH RSTUDIO
+ 
+1. Click the "Clone or download" button for your repository and then the "copy" icon. Make sure the box header lists "Clone with HTTPS" rather than "Clone with SSH." If not, click the "Use HTTPS" button and then copy the link.
+
+2. Launch RStudio and select "New Project" from the File menu. Choose "Version Control" and "Git."
+
+3. Paste the repository URL and give your repository a name and a file path.
+
+## ENTER THE KAGGLE COMPETITION
+
+I created a kaggle competition for this assignment. This is not a public competition, it's an invitation only competition. You will need to enter the competition using this
+[invitation](https://www.kaggle.com/t/7c42475e0e62412ea7e7ffb30affee1f).  
+
+## DOWNLOAD THE DATASET
+
+You should download the data set from Kaggle platform. You will find three datasets one with hourly demand, one with hourly temperature and one with hourly relative humidity from January 2005 to June 2011. Note the way the data is presented is different.
+
+Your goal is to forecast **daily** load for July 2011 based on this historical data. You may or may not use the temperature and relative humidity in your models. The temperature and humidity measurement are from stations close to the household meter data you have.
+
+## WRANGLE/PROCESS THE DATASET
+
+You will need to transform hourly data into daily data. See the Rmd file from Lesson 11 for instruction on how to aggregate your dataset using pipes. You should take the **average** of the 24 hours to obtain the daily averages.
+
+```{r package, message=FALSE}
+library(lubridate)
+library(ggplot2)
+library(forecast)  
+library(Kendall)
+library(tseries)
+library(outliers)
+library(tidyverse)
+
+#install.packages("smooth")
+library(smooth)
+```
+
+```{r}
+#importing datasets
+
+raw_load <- read.csv(file="Data_TOPOST/converting files to csv/load.csv", header = TRUE, dec = ".", sep=",") #na.strings = c("","NA")) 
+raw_temp <- read.csv(file="Data_TOPOST/converting files to csv/relative_humidity.csv", header = TRUE, dec = ".", sep=",")
+raw_humidity <- read.csv(file="Data_TOPOST/converting files to csv/temperature.csv", header = TRUE, dec = ".", sep=",")
+
+#cleaning load dataset
+raw_load <- raw_load[,-1]
+
+#cleaning more and calculating daily averages
+raw_load_2<- raw_load %>%
+  drop_na() %>%
+  mutate(date = mdy(date)) %>%
+  mutate_at(2:25, ~ as.numeric(.))
+
+load <- raw_load_2 %>%
+  mutate(daily_load = rowMeans(raw_load_2[,2:25], na.rm=TRUE))
+
+load <- load[,c(1,26)]
+
+#cleaning and calculating daily temp averages
+raw_temp_2 <- raw_temp %>%
+  drop_na() %>%
+  mutate(date = dmy(date)) %>%
+  mutate_at(3:30, ~ as.numeric(.))
+
+temp <- raw_temp_2%>%
+  mutate(hourly_avg = rowMeans(raw_temp_2[,3:30], na.rm=TRUE))%>%
+  group_by(date) %>%
+  summarise(daily_temp=mean(hourly_avg))
+
+#cleaning and calculating daily humidity
+raw_humidity_2 <- raw_humidity %>%
+  drop_na() %>%
+  mutate(date = dmy(date)) %>%
+  mutate_at(3:30, ~ as.numeric(.))
+
+humidity <- raw_humidity_2%>%
+  mutate(hourly_avg = rowMeans(raw_humidity_2[,3:30], na.rm=TRUE))%>%
+  group_by(date) %>%
+  summarise(daily_humidity=mean(hourly_avg))
+
+```
+
+## CREATE A TIME SERIES OBJECT
+
+After you process your dataset use the `msts()` function to create a time series object. You need to use `msts()` instead of `ts()` because your daily data will have more than one seasonal component.After you process your dataset use the `msts()` function to create a time series object.
+
+```{r}
+# Create a time series object using msts()
+ts_load <- msts(load$daily_load, seasonal.periods = c(7,365.25), start = c(2005,1,1))
+head(ts_load)
+
+ts_temp <- msts(temp$daily_temp, seasonal.periods = c(7,365.25), start = c(2005,1,1))
+
+ts_humidity <- msts(humidity$daily_humidity, seasonal.periods = c(7,365.25), start = c(2005,1,1))
+```
+
+
+## FIT MODELS TO YOUR DATA
+
+Fit models to your dataset considering the period Jan 1st 2005 to May 31st 2011. 
+
+```{r}
+
+#creating subset for training purposes
+
+n_for = 30
+
+ts_load_train <- subset(ts_load,end = length(ts_load)-n_for)
+ts_load_test <- subset(ts_load,start= length(ts_load)-n_for+1)
+
+#ARIMA model for training (Jan 1st 2005 to May 31st 2011)
+
+Model1_train<-auto.arima(ts_load_train)
+
+```
+
+## FORECAST DAILY DEMAND FOR JUNE 2011 
+
+Using the models from previous section, forecast daily demand for the period June 1st 2011 to June 30th 2011. Based on the models you developed which model(s) is(are) generating good forecasts? Use performance criteria MAPE (Mean Average Percentage Error) to rank/select models.
+
+You may use different forecasting windows for model selection. For example you might want to see the model behavior when forecasting July of 2010. 
+
+```{r}
+
+#forecasting june 2011
+Model1_for_jun <- forecast(Model1_train, h=30)
+plot(Model1_for_jun)
+
+#checking models
+autoplot(ts_load,series="Original")+
+  autolayer(Model1_train$fitted,series="SARIMA Model 1")+
+  autolayer(Model1_for_jun$mean,series = "SARIMA Model 1 forecast")
+  #xlim(2010,NA)
+
+```
+
+## FORECAST DAILY DEMAND FOR JULY 2011
+
+Just for the good/selected model(s) you will **re-run** the model but now using the entire dataset all the way to June 30th 2011. Then forecast Jan 1st 2011 to Jan 31st 2011.
+
+```{r}
+#fitting model to entire dataset
+Model1_all <-auto.arima(ts_load, max.p = 3, max.q = 3)
+
+#forecasting july 2011
+Model1_for_jul <- forecast(Model1_all, h=31)
+print(Model1_for_jul$mean)
+
+
+
+```
+
+
+## CREATE AN EXCEL FILE WITH FORECAST
+
+Look at the excel file in your Output folder name "submission_template.csv". You will need to create your own output file with forecast for July 2011. Your file needs to be in the format of the submission template. If your forecast is a probability distribution function, consider the mean to be the point forecast.
+
+```{r}
+#creating date dataframe
+date_for <- seq(from=as.Date("07-01-2011", format="%m-%d-%Y"), to=as.Date("07-31-2011",format="%m-%d-%Y"),by="1 day")
+date_for <- as.data.frame(date_for)
+colnames(date_for)="date"
+
+#creating forecast csv
+arima_for <- data.frame(date=date_for,load=round(Model1_for_jul$mean,digits=0))
+write.csv(arima_for, file="./Output/submission_arima.csv", row.names = FALSE)
+
+```
+
+## SUBMIT FORECAST TO KAGGLE
+
+You will need to submit your group's solution using this [link][
+https://www.kaggle.com/competitions/tsa-s24-competition].
+
+## COMPLETE YOUR PROJECT REPORT
+
+For the project report you only need to organize your current Rmd file. Make sure you follow the guidelines and you provide a link to you Github repository.
+
+1. Write in scientific style, not narrative style.
+
+2. [Global options for R chunks](https://rmarkdown.rstudio.com/lesson-3.html) should be set so that only relevant output is displayed. Turn on/off messages and warnings when applicable to avoid unnecessary outputs on the pdf.
+
+3. Make sure your final knitted PDF looks professional. Format tables, size figures, chapters, etc.
+
+4. Make sure the PDF file has the file name "Lastname1Lastname2_ENV797_A08_Competition.pdf" and submit it to Sakai under A08 - part III. You will only submit your PDF file.
+
+
+## GRADING RUBRIC
+
+You will be graded based on how much time and effort you put into the competition and your ability to fit a model to the data set. More specifically I will look into:
+
+1. number of commitments to Github repo, this item will show how the team interacted and how much you worked on the competition;
+
+2. number of submissions to Kaggle platform, this will show how many models you tried and it's also an indication of how much effort the team put into the project;
+
+3. ability to beat the vanilla/benchmark model, this will show your forecasting skills. 
+
+The team that is leading the board when the competition ends will get extra points, but they still need to get good scores on 1 and 2. 
