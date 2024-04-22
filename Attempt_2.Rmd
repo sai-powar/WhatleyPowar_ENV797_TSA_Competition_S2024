@@ -1,0 +1,59 @@
+---
+title: "TSA: Forecasting Competition Instructions"
+author: "Sai Powar & Vinny Whatley"
+date: "03/20/2024"
+output: pdf_document
+always_allow_html: true
+editor_options: 
+  chunk_output_type: console
+  markdown: 
+    wrap: sentence
+---
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(echo = TRUE,tidy.opts=list(width.cutoff=80), tidy=FALSE) 
+```
+
+```{r package, include=FALSE}
+library(lubridate)
+library(ggplot2)
+library(forecast)  
+library(Kendall)
+library(tseries)
+library(outliers)
+library(tidyverse)
+```
+
+```{r}
+#change file path for data as necessary
+raw_load <- read.csv(file="Data_TOPOST/converting files to csv/temperature.csv", header = TRUE, dec = ".", sep=",") 
+
+raw_temp <- read.csv(file="Data_TOPOST/converting files to csv/temperature.csv", header = TRUE, dec = ".", sep=",")
+
+raw_humidity <- read.csv(file="Data_TOPOST/converting files to csv/relative_humidity.csv", header = TRUE, dec = ".", sep=",")
+#checking for NA's
+anyNA(raw_load)
+anyNA(raw_temp)
+anyNA(raw_humidity)
+
+ meter_load_gather <- meter_load %>%
+  pivot_longer(cols=hr1:hr24, names_to = "Hour", values_to = "Load") `
+
+#cleaning more and calculating daily averages
+raw_load_2<- raw_load %>%
+  drop_na() %>%
+  mutate(date = mdy(date)) %>%
+  mutate_at(2:25, ~ as.numeric(.))
+
+`load_daily <- raw_load %>%
+  filter( !is.na(Load)) %>%
+  group_by(date) %>%
+  summarise( daily_mean_load = mean(Load)) 
+
+
+
+```
+
+```{r}
+
+```
+
