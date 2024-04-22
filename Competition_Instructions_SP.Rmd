@@ -55,7 +55,7 @@ library(Kendall)
 library(tseries)
 library(outliers)
 library(tidyverse)
-
+library(cowplot)
 #install.packages("smooth")
 library(smooth)
 ```
@@ -66,44 +66,87 @@ library(smooth)
 raw_load <- read.csv(file="./Data_TOPOST/load.csv", header = TRUE, dec = ".", sep=",") #na.strings = c("","NA")) 
 raw_temp <- read.csv(file="./Data_TOPOST/temperature.csv", header = TRUE, dec = ".", sep=",")
 raw_humidity <- read.csv(file="./Data_TOPOST/relative_humidity.csv", header = TRUE, dec = ".", sep=",")
+```
 
+```{r}
 #cleaning load dataset
 raw_load <- raw_load[,-1]
+```
 
+```{r}
 #cleaning more and calculating daily averages
-raw_load_2<- raw_load %>%
-  drop_na() %>%
-  mutate(date = mdy(date)) %>%
-  mutate_at(2:25, ~ as.numeric(.))
 
-load <- raw_load_2 %>%
-  mutate(daily_load = rowMeans(raw_load_2[,2:25], na.rm=TRUE))
+raw_load_pivot <- raw_load %>%
+  pivot_longer(cols=h1:h24, names_to = "Hour", values_to = "Load") %>%
+  mutate(date = mdy(date))
 
-load <- load[,c(1,26)]
-
-#cleaning and calculating daily temp averages
-raw_temp_2 <- raw_temp %>%
-  drop_na() %>%
-  mutate(date = dmy(date)) %>%
-  mutate_at(3:30, ~ as.numeric(.))
-
-temp <- raw_temp_2%>%
-  mutate(hourly_avg = rowMeans(raw_temp_2[,3:30], na.rm=TRUE))%>%
+load <- raw_load_pivot %>%
+  filter(!is.na(Load)) %>%
   group_by(date) %>%
-  summarise(daily_temp=mean(hourly_avg))
+  summarise(daily_load = mean(Load))
 
-#cleaning and calculating daily humidity
-raw_humidity_2 <- raw_humidity %>%
-  drop_na() %>%
-  mutate(date = dmy(date)) %>%
-  mutate_at(3:30, ~ as.numeric(.))
+#raw_load_2<- raw_load %>%
+  #drop_na() %>%
+  #mutate(date = mdy(date)) %>%
+  #mutate_at(2:25, ~ as.numeric(.))
 
-humidity <- raw_humidity_2%>%
-  mutate(hourly_avg = rowMeans(raw_humidity_2[,3:30], na.rm=TRUE))%>%
-  group_by(date) %>%
-  summarise(daily_humidity=mean(hourly_avg))
+#load_1 <- raw_load_2 %>%
+  #mutate(daily_load = rowMeans(raw_load_2[,2:25], na.rm=TRUE))
+
+#load_1 <- load_1[,c(1,26)]
+
+#load_1 <- load_1 %>%
+  #filter(!is.na(daily_load))
 
 ```
+
+```{r}
+#cleaning and calculating daily temp averages
+
+raw_temp_pivot <- raw_temp %>%
+  pivot_longer(cols=t_ws1:t_ws28, names_to = "station", values_to = "temp") %>%
+  mutate(date = dmy(date))
+
+temp <- raw_temp_pivot %>%
+  filter(!is.na(temp)) %>%
+  group_by(date) %>%
+  summarise(daily_temp = mean(temp)) %>%
+  drop_na()
+
+#cleaning and calculating daily humidity
+
+raw_hum_pivot <- raw_humidity %>%
+  pivot_longer(cols=rh_ws1:rh_ws28, names_to = "station", values_to = "humidity") %>%
+  mutate(date = dmy(date))
+
+humidity <- raw_hum_pivot %>%
+  filter(!is.na(humidity)) %>%
+  group_by(date) %>%
+  summarise(daily_humidity = mean(humidity))
+
+#old code
+#raw_temp_2 <- raw_temp %>%
+  #drop_na() %>%
+  #mutate(date = dmy(date)) %>%
+  #mutate_at(3:30, ~ as.numeric(.))
+
+#temp <- raw_temp_2%>%
+  #mutate(hourly_avg = rowMeans(raw_temp_2[,3:30], na.rm=TRUE))%>%
+  #group_by(date) %>%
+  #summarise(daily_temp=mean(hourly_avg))
+
+#raw_humidity_2 <- raw_humidity %>%
+  #drop_na() %>%
+  #mutate(date = dmy(date)) %>%
+  #mutate_at(3:30, ~ as.numeric(.))
+
+#humidity <- raw_humidity_2%>%
+  #mutate(hourly_avg = rowMeans(raw_humidity_2[,3:30], na.rm=TRUE))%>%
+  #group_by(date) %>%
+  #summarise(daily_humidity=mean(hourly_avg))
+
+```
+
 
 ## CREATE A TIME SERIES OBJECT
 
@@ -120,9 +163,79 @@ ts_humidity <- msts(humidity$daily_humidity, seasonal.periods = c(7,365.25), sta
 ```
 
 
+```{r}
+
+#plotting the time series
+
+og_p1 <- autoplot(ts_load,ylab="Daily Load")
+og_p1
+
+og_p2 <-plot_grid(
+  autoplot(ts_temp, ylab="Daily Temp"),
+  autoplot(ts_humidity, ylab="Daily Humidity"))
+og_p2
+
+```
+
+
 ## FIT MODELS TO YOUR DATA
 
 Fit models to your dataset considering the period Jan 1st 2005 to May 31st 2011. 
+
+```{r}
+
+#plotting ACF and PACF
+
+p3_acf<-plot_grid(
+  autoplot(Acf(ts_load,lag.max=40,plot=FALSE)),
+  autoplot(Pacf(ts_load,lag.max=40,plot=FALSE)))
+p3_acf
+
+#ACF has slow decay, and PACF cuts off at lag 1 and is negative = AR process
+#there are spikes at seasonal lags as well
+
+```
+
+```{r}
+#trend tests
+SMKtest <- SeasonalMannKendall(ts_load)
+print("Results for Seasonal Mann Kendall /n")
+print(summary(SMKtest))
+
+print("Results for ADF test/n")
+print(adf.test(ts_load,alternative = "stationary"))
+
+#SMK - S is positive, so there is an increasing trend. p-value<0.05 so there is a significant trend.
+#ADF - p-value<0.05 so null hypothesis is rejected and series has deterministic/stationary trend. 
+
+```
+
+```{r}
+#decomposing the series
+decompose_load <- decompose(ts_load,"additive")
+plot(decompose_load)
+
+#increasing trend, seasonality too but the wave pattern is interesting
+
+#creating and plotting non-seasonal series
+deseasonal_load <- seasadj(decompose_load)
+plot(deseasonal_load)
+
+autoplot(deseasonal_load)+
+  autolayer(ts_load)
+
+plot_grid(
+  autoplot(Acf(ts_load, lag = 40, plot=FALSE), 
+                main = "Orginal Load"),
+  autoplot(Acf(deseasonal_load, lag = 40, plot=FALSE),  
+                  main = "Deseason Load")
+)
+
+print("Results for ADF test/n")
+print(adf.test(deseasonal_load))
+
+```
+
 
 ```{r}
 
@@ -132,7 +245,11 @@ n_for = 30
 
 ts_load_train <- subset(ts_load,end = length(ts_load)-n_for)
 ts_load_test <- subset(ts_load,start= length(ts_load)-n_for+1)
+```
 
+
+
+```{r}
 #ARIMA model for training (Jan 1st 2005 to May 31st 2011)
 
 Model1_train<-auto.arima(ts_load_train)
