@@ -186,12 +186,14 @@ Fit models to your dataset considering the period Jan 1st 2005 to May 31st 2011.
 
 #plotting ACF and PACF
 
-p3_acf<-plot_grid(
+plot_grid(
   autoplot(Acf(ts_load,lag.max=40,plot=FALSE)),
   autoplot(Pacf(ts_load,lag.max=40,plot=FALSE)))
-p3_acf
 
-#ACF has slow decay, and PACF cuts off at lag 1 and is negative = AR process
+ACF_Plot <- Acf(ts_load, lag = 40, plot = TRUE)
+PACF_Plot <- Pacf(ts_load, lag = 40)
+
+#ACF has slow decats_load#ACF has slow decay, and PACF cuts off at lag 1 and is negative = AR process
 #there are spikes at seasonal lags as well
 
 ```
@@ -212,11 +214,15 @@ print(adf.test(ts_load,alternative = "stationary"))
 
 ```{r}
 #decomposing the series
-decompose_load <- decompose(ts_load,"additive")
-plot(decompose_load)
+ts_load %>% mstl() %>%
+  autoplot()
 
 #increasing trend, seasonality too but the wave pattern is interesting
 
+```
+
+```{r}
+#old code do not run 
 #creating and plotting non-seasonal series
 deseasonal_load <- seasadj(decompose_load)
 plot(deseasonal_load)
@@ -245,6 +251,9 @@ n_for = 30
 
 ts_load_train <- subset(ts_load,end = length(ts_load)-n_for)
 ts_load_test <- subset(ts_load,start= length(ts_load)-n_for+1)
+
+autoplot(ts_load_train)
+autoplot(ts_load_test)
 ```
 
 
@@ -281,6 +290,23 @@ autoplot(ts_load,series="Original")+
 Just for the good/selected model(s) you will **re-run** the model but now using the entire dataset all the way to June 30th 2011. Then forecast Jan 1st 2011 to Jan 31st 2011.
 
 ```{r}
+#only competition submissions
+
+#Model 1: Arithmetic mean
+Model1 <- meanf(ts_load,h=n_for+1)
+summary(Model1)
+plot(Model1)
+
+#Model 2: Seasonal naive
+Model2 <- snaive(ts_load,h=n_for+1)
+summary(Model2)
+plot(Model2)
+
+#Model 3: Arima
+
+```
+
+```{r}
 #fitting model to entire dataset
 Model1_all <-auto.arima(ts_load)
 
@@ -299,10 +325,18 @@ Look at the excel file in your Output folder name "submission_template.csv". You
 date_for <- seq(from=as.Date("07-01-2011", format="%m-%d-%Y"), to=as.Date("07-31-2011",format="%m-%d-%Y"),by="1 day")
 date_for <- as.data.frame(date_for)
 colnames(date_for)="date"
+```
 
-#creating forecast csv
-arima_for <- data.frame(date=date_for,load=round(Model1_for_jul$mean,digits=0))
-write.csv(arima_for, file="./Output/submission_arima.csv", row.names = FALSE)
+```{r}
+#only competition submissions
+
+#creating Model 1 csv
+amean_for <- data.frame(date=date_for,load=round(Model1$mean,digits=0))
+write.csv(amean_for, file="./Output/submission_arithmetic_mean.csv", row.names = FALSE)
+
+#creating Model 2 csv
+snaive_for <- data.frame(date=date_for,load=round(Model2$mean,digits=0))
+write.csv(snaive_for, file="./Output/submission_seasonal_naive.csv", row.names = FALSE)
 
 ```
 
