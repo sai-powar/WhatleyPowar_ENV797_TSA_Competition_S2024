@@ -1,0 +1,150 @@
+---
+title: "TSA: Forecasting Competition Instructions"
+author: "Sai Powar & Vinny Whatley"
+date: "03/20/2024"
+output: pdf_document
+always_allow_html: true
+editor_options: 
+  chunk_output_type: console
+  markdown: 
+    wrap: sentence
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(echo = TRUE,tidy.opts=list(width.cutoff=80), tidy=FALSE) 
+```
+
+```{r package, message=FALSE}
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
+library(forecast)  
+library(Kendall)
+library(tseries)
+library(outliers)
+library(tidyverse)
+library(cowplot)
+#install.packages("smooth")
+library(smooth)
+```
+
+```{r}
+#change file path for data as necessary
+raw_load <- read.csv(file="Data_TOPOST/converting files to csv/temperature.csv", header = TRUE, dec = ".", sep=",") 
+
+raw_temp <- read.csv(file="Data_TOPOST/converting files to csv/temperature.csv", header = TRUE, dec = ".", sep=",")
+
+raw_humidity <- read.csv(file="Data_TOPOST/converting files to csv/relative_humidity.csv", header = TRUE, dec = ".", sep=",")
+```
+
+```{r}
+#cleaning more and calculating daily averages
+
+
+raw_load_gather <- raw_load %>%
+  pivot_longer(cols=hr, names_to = "Hour", values_to = "Load")
+
+load_daily <- raw_load_gather %>%
+  filter( !is.na(Load)) %>%
+  group_by(date) %>%
+  summarise( daily_mean_load = mean(Load)) 
+
+
+```
+
+```{r}
+# Step 1: Pivot the data
+raw_load_gather <- raw_load %>%
+  pivot_longer(cols = starts_with("hr"), names_to = "Hour", values_to = "Load")
+
+# Step 2: Filter out rows with missing load values
+filtered_data <- raw_load_gather %>%
+  filter(!is.na(Load))
+
+# Step 3 & 4: Group by date and calculate daily mean load
+load_daily <- filtered_data %>%
+  group_by(date) %>%
+  summarise(daily_mean_load = mean(Load))
+```
+
+
+```{r}
+#cleaning and calculating daily temp averages
+
+raw_temp_pivot <- raw_temp %>%
+  pivot_longer(cols=t_ws1:t_ws28, names_to = "station", values_to = "temp") %>%
+  mutate(date = dmy(date))
+
+temp <- raw_temp_pivot %>%
+  filter(!is.na(temp)) %>%
+  group_by(date) %>%
+  summarise(daily_temp = mean(temp)) %>%
+  drop_na()
+
+#cleaning and calculating daily humidity
+
+raw_hum_pivot <- raw_humidity %>%
+  pivot_longer(cols=rh_ws1:rh_ws28, names_to = "station", values_to = "humidity") %>%
+  mutate(date = dmy(date))
+
+humidity <- raw_hum_pivot %>%
+  filter(!is.na(humidity)) %>%
+  group_by(date) %>%
+  summarise(daily_humidity = mean(humidity))
+```
+
+```{r}
+# Create a time series object using msts()
+ts_load <- msts(load_daily$daily_mean_load, seasonal.periods = c(1,365.25), start = c(2005,1,1))
+head(ts_load)
+
+ts_temp <- msts(temp$daily_temp, seasonal.periods = c(7,365.25), start = c(2005,1,1))
+
+ts_humidity <- msts(humidity$daily_humidity, seasonal.periods = c(7,365.25), start = c(2005,1,1))
+```
+
+```{r}
+# Generate the autocorrelation plot
+autoplot(ts_load, series = "A")
+
+# Generate the partial autocorrelation plot
+autoplot(ts_load, series = "P")
+```
+
+Fit models to your dataset considering the period Jan 1st 2005 to May 31st 2011. 
+
+```{r}
+
+#plotting ACF and PACF
+
+plot_grid(
+  autoplot(Acf(ts_load,lag.max=40,plot=FALSE)),
+  autoplot(Pacf(ts_load,lag.max=40,plot=FALSE)))
+
+ACF_Plot <- Acf(ts_load, lag = 40, plot = TRUE)
+PACF_Plot <- Pacf(ts_load, lag = 40)
+
+#ACF has slow decats_load#ACF has slow decay, and PACF cuts off at lag 1 and is negative = AR process
+#there are spikes at seasonal lags as well
+
+```
+
+```{r}
+#trend tests
+SMKtest <- SeasonalMannKendall(ts_load)
+print("Results for Seasonal Mann Kendall /n")
+print(summary(SMKtest))
+
+print("Results for ADF test/n")
+print(adf.test(ts_load,alternative = "stationary"))
+
+#SMK - S is positive, so there is an increasing trend. p-value<0.05 so there is a significant trend.
+#ADF - p-value<0.05 so null hypothesis is rejected and series has deterministic/stationary trend. 
+
+```
+
+```{r}
+
+```
+
