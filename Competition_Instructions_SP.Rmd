@@ -58,6 +58,8 @@ library(tidyverse)
 library(cowplot)
 #install.packages("smooth")
 library(smooth)
+#install.packages("kableExtra")
+library(kableExtra)
 ```
 
 ```{r}
@@ -167,13 +169,12 @@ ts_humidity <- msts(humidity$daily_humidity, seasonal.periods = c(7,365.25), sta
 
 #plotting the time series
 
-og_p1 <- autoplot(ts_load,ylab="Daily Load")
-og_p1
+autoplot(ts_load,ylab="Daily Load")
 
-og_p2 <-plot_grid(
+plot_grid(
   autoplot(ts_temp, ylab="Daily Temp"),
   autoplot(ts_humidity, ylab="Daily Humidity"))
-og_p2
+
 
 ```
 
@@ -190,8 +191,10 @@ plot_grid(
   autoplot(Acf(ts_load,lag.max=40,plot=FALSE)),
   autoplot(Pacf(ts_load,lag.max=40,plot=FALSE)))
 
+par(mfrow=c(1,2))
 ACF_Plot <- Acf(ts_load, lag = 40, plot = TRUE)
 PACF_Plot <- Pacf(ts_load, lag = 40)
+par(mfrow=c(1,1))
 
 #ACF has slow decats_load#ACF has slow decay, and PACF cuts off at lag 1 and is negative = AR process
 #there are spikes at seasonal lags as well
@@ -257,11 +260,37 @@ autoplot(ts_load_test)
 ```
 
 
-
 ```{r}
-#ARIMA model for training (Jan 1st 2005 to May 31st 2011)
 
-Model1_train<-auto.arima(ts_load_train)
+#Model 3: SARIMA
+Model3 <- auto.arima(ts_load_train)
+
+#Model 4: SES 
+Model4 <- ses(ts_load_train, h=n_for)
+plot(Model4)
+
+#Model 5: SS Exponential smoothing 
+Model5 <- es(ts_load_train, model="ZZZ",h=n_for, holdout = FALSE)
+plot(Model5)
+checkresiduals(Model5)
+
+#Model 6: STL + ETS
+Model6<- stlf(ts_load_train,h=n_for)
+plot(Model6)
+
+#Model 7: ARIMA + Fourier K=2,12
+Model7 <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                              K=c(2,12)))
+
+#Model 8: ARIMA + Fouriier K=2,24
+Model8 <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                              K=c(2,24)))
 
 ```
 
@@ -273,15 +302,67 @@ You may use different forecasting windows for model selection. For example you m
 
 ```{r}
 
-#forecasting june 2011
-Model1_for_jun <- forecast(Model1_train, h=30)
-plot(Model1_for_jun)
+#forecasting using SARIMA
+Model3_for_jun <- forecast(Model3, h=n_for)
+plot(Model3_for_jun)
 
-#checking models
 autoplot(ts_load,series="Original")+
-  autolayer(Model1_train$fitted,series="SARIMA Model 1")+
-  autolayer(Model1_for_jun$mean,series = "SARIMA Model 1 forecast")
+  autolayer(Model3$fitted,series="SARIMA")+
+  autolayer(Model3_for_jun$mean,series = "SARIMA forecast")
   #xlim(2010,NA)
+
+SARIMA_score <- accuracy(Model3_for_jun$mean,ts_load_test)
+
+#SES
+SES_score <- accuracy(Model4$mean,ts_load_test)
+
+#SS ES
+SSES_score <- accuracy(Model5$forecast, ts_load_test)
+
+#ETS score
+ETS_score <- accuracy(Model6$mean, ts_load_test)
+
+#ARIMA + fourier, K=(2,12)
+Model7_for <- forecast(Model7,
+                           xreg=fourier(ts_load_train,
+                                        K=c(2,12),
+                                        h=n_for), #forecast 365 fourier terms
+                           h=n_for #forecast 365 terms for the arima model 
+                           )
+autoplot(Model7_for)
+
+Model7_score <- accuracy(Model7_for$mean, ts_load_test)
+
+#ARIMA + fourier, K=(2,24)
+Model8_for <- forecast(Model8,
+                           xreg=fourier(ts_load_train,
+                                        K=c(2,24),
+                                        h=n_for), #forecast 365 fourier terms
+                           h=n_for #forecast 365 terms for the arima model 
+                           )
+autoplot(Model8_for)
+
+Model8_score <- accuracy(Model8_for$mean, ts_load_test)
+
+```
+
+
+```{r}
+#creating data frame of all the model scores
+all_scores <- as.data.frame(rbind(SARIMA_score, SES_score, SSES_score, ETS_score, Model7_score, Model8_score))
+row.names(all_scores) <- c("SARIMA", "SES", "SSES", "STL+ETS", "A+F,K=c(2,12)", "A+F,K=c(2,24)")
+
+```
+
+```{r}
+
+#table of scores
+
+kbl(all_scores,
+    caption = "Forecast accuracy for daily load data",
+    digits = array(5,ncol(all_scores)))%>%
+  kable_styling(full_width = FALSE, position = "center") %>%
+  kable_styling(latex_options="striped", stripe_index = which.min(all_scores[,"MAPE"]))
 
 ```
 
@@ -302,17 +383,21 @@ Model2 <- snaive(ts_load,h=n_for+1)
 summary(Model2)
 plot(Model2)
 
-#Model 3: Arima
+#Model 3: SARIMA
+SARIMA_jul <- auto.arima(ts_load)
+SARIMA_for_jul <- forecast(SARIMA_jul, h=n_for+1)
+plot(SARIMA_for_jul)
 
-```
+#Model 4: SES
+SES_jul <- ses(ts_load, h=n_for+1)
+plot(SES_jul)
 
-```{r}
-#fitting model to entire dataset
-Model1_all <-auto.arima(ts_load)
+#Model 5: SSES
+SSES_jul <- es(ts_load, model="ZZZ",h=n_for+1, holdout = FALSE)
 
-#forecasting july 2011
-Model1_for_jul <- forecast(Model1_all, h=31)
-print(Model1_for_jul$mean)
+#Model 6: STL + ETS
+ETS_jul <- stlf(ts_load,h=n_for+1)
+plot(ETS_jul)
 
 ```
 
@@ -337,6 +422,22 @@ write.csv(amean_for, file="./Output/submission_arithmetic_mean.csv", row.names =
 #creating Model 2 csv
 snaive_for <- data.frame(date=date_for,load=round(Model2$mean,digits=0))
 write.csv(snaive_for, file="./Output/submission_seasonal_naive.csv", row.names = FALSE)
+
+#creating SARIMA csv
+SARIMA_for <- data.frame(date=date_for,load=round(SARIMA_for_jul$mean,digits=0))
+write.csv(SARIMA_for, file="./Output/submission_sarima.csv", row.names = FALSE)
+
+#creating SES csv
+SES_for <- data.frame(date=date_for,load=round(SES_jul$mean,digits=0))
+write.csv(SES_for, file="./Output/submission_ses.csv", row.names = FALSE)
+
+#creating SSES csv
+SSES_for <- data.frame(date=date_for,load=round(SSES_jul$forecast,digits=0))
+write.csv(SSES_for, file="./Output/submission_sses.csv", row.names = FALSE)
+
+#creating ETS csv
+ETS_for <- data.frame(date=date_for,load=round(ETS_jul$mean,digits=0))
+write.csv(ETS_for, file="./Output/submission_ets.csv", row.names = FALSE)
 
 ```
 
