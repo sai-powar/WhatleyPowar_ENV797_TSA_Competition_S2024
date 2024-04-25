@@ -16,6 +16,8 @@ knitr::opts_chunk$set(echo = TRUE,tidy.opts=list(width.cutoff=80), tidy=FALSE)
 
 ```{r package, message=FALSE}
 library(dplyr)
+library(KFAS)
+install.packages("KFAS")
 library(tidyr)
 library(lubridate)
 library(ggplot2)
@@ -25,8 +27,18 @@ library(tseries)
 library(outliers)
 library(tidyverse)
 library(cowplot)
+library(nnet)
+library(KernSmooth)
 #install.packages("smooth")
 library(smooth)
+library(kableExtra)
+library(keras)
+library(tibble)
+library(fpp3)
+install.packages("reticulate")
+reticulate::install_tensorflow()
+reticulate::py_install("tensorflow")
+install("tensorflow")
 ```
 
 ```{r}
@@ -39,71 +51,17 @@ raw_humidity <- read.csv(file="Data_TOPOST/converting files to csv/relative_humi
 ```
 
 ```{r}
-#pratice
-raw_load <- raw_load %>%
-  drop_na() %>%
-  mutate(date = dmy(date)) %>%
-  mutate(date = format(date, "%m-%d-%Y"))  # Change date format to mm-dd-yyyy
-
-# Pivot the data
-raw_load_gather <- raw_load %>%
-  pivot_longer(cols = starts_with("t_ws"), names_to = "Hour", values_to = "Load")
-
-# Convert Hour column to numeric
-raw_load_gather <- raw_load_gather %>%
-  mutate(Hour = as.numeric(gsub("t_ws", "", Hour)))
-
-# Group by date and hour, then calculate the mean load
-load_hourly <- raw_load_gather %>%
-  group_by(date, Hour) %>%
-  summarise(hourly_mean_load = mean(Load))
-```
+#most recent load tab
 
 
-```{r}
-#cleaning more and calculating daily averages
 
-# Assuming 'date' column is in mm/dd/yyyy format
-raw_load <- raw_load %>%
-  drop_na() %>%
-  mutate(date = dmy(date)) %>%
-  mutate(date = format(date, "%m-%d-%Y"))  # Change date format to mm-dd-yyyy
+load_gather <- raw_load %>%
+  pivot_longer(cols = 3:30, names_to = "Hour", values_to = "Load")
 
-raw_load_gather <- raw_load %>%
-  pivot_longer(cols=hr, names_to = "Hour", values_to = "Load")
-
-load_daily <- raw_load_gather %>%
+load_daily <- load_gather %>%
   filter( !is.na(Load)) %>%
   group_by(date) %>%
   summarise( daily_mean_load = mean(Load)) 
-
-
-```
-
-```{r}
-#dont run this 
-
-# Step 1: Pivot the data
-raw_load_gather <- raw_load %>%
-  pivot_longer(cols = starts_with("hr"), names_to = "Hour", values_to = "Load")
-
-# Step 2: Filter out rows with missing load values
-filtered_data <- raw_load_gather %>%
-  filter(!is.na(Load))
-
-# Step 3 & 4: Group by date and calculate daily mean load
-load_daily <- filtered_data %>%
-  group_by(date) %>%
-  summarise(daily_mean_load = mean(Load))
-
-# Step 3 & 4: Group by date and calculate daily mean load
-load_daily <- filtered_data %>%
-  group_by(date)
-
-# Assuming your data frame is called 'raw_load_pivot'
-raw_load_pivot <- load_daily %>%
-  mutate(avg_t_ws = rowMeans(select(., t_ws1:t_ws28), na.rm = TRUE))
-
 ```
 
 
@@ -134,7 +92,7 @@ humidity <- raw_hum_pivot %>%
 
 ```{r}
 # Create a time series object using msts()
-ts_load <- msts(load_hourly$hourly_mean_load, seasonal.periods = c(7,365.25), start = c(2005,1,1))
+ts_load <- msts(load_daily$daily_mean_load, seasonal.periods = c(7,365.25), start = c(2005,1,1))
 head(ts_load)
  
 # Plot the time series
@@ -146,59 +104,56 @@ ts_humidity <- msts(humidity$daily_humidity, seasonal.periods = c(7,365.25), sta
 ```
 
 ```{r}
-#pratice
-class(subset_data)
 
-arima_model <- auto.arima(subset_data)
-```
+#plotting the time series
 
+autoplot(ts_load,ylab="Daily Load")
 
-```{r}
-# Subset data from January 1st, 2005 to May 31st, 2011
-subset_data <- window(ts_load, start = c(2005, 1), end = c(2011, 5))
-
-frequency(subset_data)
-
-# Fit ARIMA model
-arima_model <- arima(subset_data, order = c(1, 0, 1), seasonal = c(1, 1, 1), 
-                     xreg = NULL, include.mean = TRUE)
+plot_grid(
+  autoplot(ts_temp, ylab="Daily Temp"),
+  autoplot(ts_humidity, ylab="Daily Humidity"))
 
 
 ```
 
 
-```{r}
-# Generate the autocorrelation plot
-autoplot(ts_load, series = "A")
-
-# Generate the partial autocorrelation plot
-autoplot(ts_load, series = "P")
-```
+## FIT MODELS TO YOUR DATA
 
 Fit models to your dataset considering the period Jan 1st 2005 to May 31st 2011. 
 
 ```{r}
 
 #plotting ACF and PACF
-# Calculate ACF and PACF
-acf_result <- Acf(ts_load, lag.max = 40, plot = FALSE)$acf
-pacf_result <- Pacf(ts_load, lag.max = 40, plot = FALSE)$pacf
 
-# Convert arrays to data frames
-acf_df <- data.frame(Lag = 0:40, ACF = acf_result)
-pacf_df <- data.frame(Lag = 0:40, PACF = pacf_result)
-
-# Plot the ACF and PACF
 plot_grid(
-  autoplot(acf_df, aes(x = Lag, y = ACF)) +
-    geom_hline(yintercept = 0, linetype = "dotted") +
-    labs(title = "Autocorrelation Function (ACF)"),
-  autoplot(pacf_df, aes(x = Lag, y = PACF)) +
-    geom_hline(yintercept = 0, linetype = "dotted") +
-    labs(title = "Partial Autocorrelation Function (PACF)"),
-  ncol = 2
-)
+  autoplot(Acf(ts_load,lag.max=40,plot=FALSE)),
+  autoplot(Pacf(ts_load,lag.max=40,plot=FALSE)))
 
+par(mfrow=c(1,2))
+ACF_Plot <- Acf(ts_load, lag = 40, plot = TRUE)
+PACF_Plot <- Pacf(ts_load, lag = 40)
+par(mfrow=c(1,1))
+
+#ACF has slow decats_load#ACF has slow decay, and PACF cuts off at lag 1 and is negative = AR process
+#there are spikes at seasonal lags as well
+
+```
+
+
+```{r}
+# Subset data from January 1st, 2005 to May 31st, 2011
+subset_data <- window(ts_load, start = c(2005, 1), end = c(2011, 6))
+
+frequency(subset_data)
+
+```
+
+
+Fit models to your dataset considering the period Jan 1st 2005 to May 31st 2011. 
+
+```{r}
+
+#plotting ACF and PACF
 
 plot_grid(
   autoplot(Acf(ts_load,lag.max=40,plot=FALSE)),
@@ -226,6 +181,7 @@ print(adf.test(ts_load,alternative = "stationary"))
 
 ```
 
+
 ```{r}
 #decomposing the series
 
@@ -237,18 +193,6 @@ random <- decomposed$random
 ```
 
 ```{r}
-autoplot(random)+
-  autolayer(ts_load)
-
-plot_grid(
-  autoplot(Acf(ts_load, lag = 40, plot=FALSE), 
-                main = "Orginal Load"),
-  autoplot(Acf(random, lag = 40, plot=FALSE),  
-                  main = "Deseason Load")
-)
-```
-
-```{r}
 
 #creating subset for training purposes
 
@@ -261,32 +205,128 @@ autoplot(ts_load_train)
 autoplot(ts_load_test)
 ```
 
+
+
 ```{r}
+#some of these take a while to load
 
-#creating subset for training purposes
+# Model9
+Model9 <- snaive(ts_load_train)
+forecast_sn <- forecast(Model9, h = n_for)
+plot(forecast_sn)
+checkresiduals(Model9)
 
-n_for = 30
 
-ts_load_train <- subset(ts_load,end = length(ts_load)-n_for)
-ts_load_test <- subset(ts_load,start= length(ts_load)-n_for+1)
 
-autoplot(ts_load_train)
-autoplot(ts_load_test)
+#Model 10 neural network model
+Model10 <- nnetar(ts_load_train, h = n_for)
+forecast_nn <- forecast(Model10)
+autoplot(forecast_nn)
+
+
+
+
+#fit previous two models to be combined into one model
+seasonal_naive_model <- snaive(ts_load_train)
+neural_network_model <- nnetar(ts_load_train)
+n_for2 <- 12  # Adjust as needed
+
+# orecasts from both models
+forecast_seasonal_naive <- forecast(seasonal_naive_model, h = n_for2)
+forecast_neural_network <- forecast(neural_network_model, h = n_for2)
+
+
+# Check if both forecasts have non-zero length
+if (length(forecast_seasonal_naive$mean) > 0 && length(forecast_neural_network$mean) > 0) {
+  # Combine forecasts (for example, using equal weights)
+  Model11 <- (forecast_seasonal_naive$mean + forecast_neural_network$mean) / 2
+  
+  # Plot combined forecast
+  plot(Model11)
+  
+  # Check residuals
+  # As neural networks are non-linear models, checking residuals may not be as straightforward as linear models.
+  # You can consider visual inspection or other methods suitable for evaluating neural network forecasts.
+} else {
+  # Handle the case where one or both forecasts have zero length
+  warning("One or both forecasts have zero length. Unable to combine forecasts.")
+}
+
+#Model 12 neural STL model
+# Fit STL model
+Model12 <- stl(ts_load_train, s.window = "periodic", robust = TRUE)
+# Forecast
+forecast_stl <- forecast(Model12, h = n_for)
+# Plot forecast
+autoplot(forecast_stl)
+
+
+```
+
+Submission
+```{r}
+#creating date dataframe
+date_for <- seq(from=as.Date("07-01-2011", format="%m-%d-%Y"), to=as.Date("07-31-2011",format="%m-%d-%Y"),by="1 day")
+date_for <- as.data.frame(date_for)
+colnames(date_for)="date"
 ```
 
 ```{r}
-#ARIMA model for training (Jan 1st 2005 to May 31st 2011)
+length(date_for)
+length(Model9$mean)
 
-ts_load_train <- msts(ts_load, seasonal.periods = c(12, 365.25), start = c(2005, 1), frequency = 365.25)
-ts_load_train <- msts(ts_load, seasonal.periods = c(12, 365.25), start = c(2005, 1))
-Model1_train<-auto.arima(ts_load_train)
-Model1_train <- auto.arima(ts_load_train, D = c(1, 1))
+start_date <- as.Date("2011-07-01")  # Replace with your start date
+end_date <- as.Date("2011-07-31")    # Replace with your end date
+date_for <- seq(start_date, by = "day", length.out = length(Model9$mean))
+
+str(Model10$mean)
 
 
-length(c(1, 1))
+str(Model11)
+# Create SN_NN_for data frame
+#SN_NN_for <- data.frame(date = SN_NN_model$date, load = SN_NN_model$load)
+
+# Create STL_for data frame
+
+STL_for <- data.frame(date = date_for, load = round(forecast_stl$mean, digits = 0))
+length(date_for)
+length(forecast_stl$mean)
+```
 
 
-ts_load_train_ts <- ts(ts_load_train, start = start(ts_load_train), frequency = frequency(ts_load_train))
-Model1_train <- auto.arima(ts_load_train_ts, D = c(1, 1))
+```{r}
+#only competition submissions
+
+#creating Model 9 csv
+Sn_for <- data.frame(date=date_for,load=round(forecast_sn$mean,digits=0))
+write.csv(Sn_for, file="./Output/submission_Sn_VW.csv", row.names = FALSE)
+
+#creating Model 10 csv
+nn_for <- data.frame(date=date_for,load=round(forecast_nn$mean,digits=0))
+write.csv(nn_for, file="./Output/submission_NN_VW.csv", row.names = FALSE)
+
+#Model 11
+SN_NN_for <- data.frame(date=date_for,load=round(SN_NN_fors=0))
+write.csv(SN_NN_for, file="./Output/submission_SN_NN_VW.csv", row.names = FALSE)
+
+#Model 12
+STL_for1 <- data.frame(date=date_for,load=round(STL_for$mean,digits =0))
+write.csv(SN_NN_for, file="./Output/submission_SN_NN_VW.csv", row.names = FALSE)
+
+
+#creating Model 13 csv
+GP_for <- data.frame(date=date_for,load=round(forecast_GP$mean,digits=0))
+write.csv(nn_for, file="./Output/submission_GP_VW.csv", row.names = FALSE)
+
+#  GP model12
+Model_12 <- ksmooth(ts_load_train, "normal", bandwidth = 1)
+
+# Forecast
+forecast_GP <- predict(Model_12, x = seq_along(ts_load_train) + n_for)
+
+# Plot forecast
+plot(ts_load_train)
+lines(seq_along(ts_load_train) + n_for, forecast_GP$y, col = "red")
+
 ```
 
