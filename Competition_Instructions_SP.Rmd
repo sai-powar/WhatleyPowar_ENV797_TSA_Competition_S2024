@@ -224,27 +224,6 @@ ts_load %>% mstl() %>%
 
 ```
 
-```{r}
-#old code do not run 
-#creating and plotting non-seasonal series
-deseasonal_load <- seasadj(decompose_load)
-plot(deseasonal_load)
-
-autoplot(deseasonal_load)+
-  autolayer(ts_load)
-
-plot_grid(
-  autoplot(Acf(ts_load, lag = 40, plot=FALSE), 
-                main = "Orginal Load"),
-  autoplot(Acf(deseasonal_load, lag = 40, plot=FALSE),  
-                  main = "Deseason Load")
-)
-
-print("Results for ADF test/n")
-print(adf.test(deseasonal_load))
-
-```
-
 
 ```{r}
 
@@ -262,8 +241,9 @@ autoplot(ts_load_test)
 
 ```{r}
 
+#not using SARIMA
 #Model 3: SARIMA
-Model3 <- auto.arima(ts_load_train)
+#Model3 <- auto.arima(ts_load_train)
 
 #Model 4: SES 
 Model4 <- ses(ts_load_train, h=n_for)
@@ -292,6 +272,21 @@ Model8 <- auto.arima(ts_load_train,
                              xreg=fourier(ts_load_train, 
                               K=c(2,24)))
 
+# Model9
+Model9 <- snaive(ts_load_train)
+checkresiduals(Model9)
+
+#Model10
+Model10 <- nnetar(ts_load_train,
+                  p=1,
+                  P=0,
+                  xreg=fourier(ts_load_train, K=c(2,12)))
+
+#Model12
+Model12 <- stl(ts_load_train, s.window = "periodic", robust = TRUE)
+
+
+
 ```
 
 ## FORECAST DAILY DEMAND FOR JUNE 2011 
@@ -302,16 +297,17 @@ You may use different forecasting windows for model selection. For example you m
 
 ```{r}
 
+#not using SARIMA anymore
 #forecasting using SARIMA
-Model3_for_jun <- forecast(Model3, h=n_for)
-plot(Model3_for_jun)
+#Model3_for_jun <- forecast(Model3, h=n_for)
+#plot(Model3_for_jun)
 
-autoplot(ts_load,series="Original")+
-  autolayer(Model3$fitted,series="SARIMA")+
-  autolayer(Model3_for_jun$mean,series = "SARIMA forecast")
+#autoplot(ts_load,series="Original")+
+  #autolayer(Model3$fitted,series="SARIMA")+
+  #autolayer(Model3_for_jun$mean,series = "SARIMA forecast")
   #xlim(2010,NA)
 
-SARIMA_score <- accuracy(Model3_for_jun$mean,ts_load_test)
+#SARIMA_score <- accuracy(Model3_for_jun$mean,ts_load_test)
 
 #SES
 SES_score <- accuracy(Model4$mean,ts_load_test)
@@ -344,13 +340,28 @@ autoplot(Model8_for)
 
 Model8_score <- accuracy(Model8_for$mean, ts_load_test)
 
+#Snaive
+Model9_for <- forecast(Model9, h = n_for)
+plot(Model9_for)
+Model9_score <- accuracy(Model9_for$mean, ts_load_test)
+
+#NN K=2,12
+Model10_for <- forecast(Model10, h=n_for,xreg=fourier(ts_load_train,K=c(2,12),h=n_for))
+autoplot(Model10_for)
+Model10_score <- accuracy(Model10_for$mean, ts_load_test)
+
+#STL
+Model12_for <- forecast(Model12, h = n_for)
+autoplot(Model12_for)
+Model12_score <- accuracy(Model12_for$mean, ts_load_test)
+
 ```
 
 
 ```{r}
 #creating data frame of all the model scores
-all_scores <- as.data.frame(rbind(SARIMA_score, SES_score, SSES_score, ETS_score, Model7_score, Model8_score))
-row.names(all_scores) <- c("SARIMA", "SES", "SSES", "STL+ETS", "A+F,K=c(2,12)", "A+F,K=c(2,24)")
+all_scores <- as.data.frame(rbind(SES_score, SSES_score, ETS_score, Model7_score, Model8_score, Model9_score, Model10_score, Model12_score))
+row.names(all_scores) <- c("SES", "SSES", "STL+ETS", "A+F,K=c(2,12)", "A+F,K=c(2,24)", "SNaive", "NN K=c(2,12)", "STL")
 
 ```
 
@@ -399,6 +410,54 @@ SSES_jul <- es(ts_load, model="ZZZ",h=n_for+1, holdout = FALSE)
 ETS_jul <- stlf(ts_load,h=n_for+1)
 plot(ETS_jul)
 
+#Model 7: ARIMA + Fourier
+AF12_jul <- auto.arima(ts_load, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load, 
+                              K=c(2,12)))
+
+AF12_jul_for <- forecast(AF12_jul,
+            xreg=fourier(ts_load,
+            K=c(2,12),
+            h=n_for+1),
+            h=n_for+1 
+            )
+plot(AF12_jul_for)
+
+#Model 8: ARIMA + Fourier
+AF24_jul <- auto.arima(ts_load, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load, 
+                              K=c(2,24)))
+
+AF24_jul_for <- forecast(AF24_jul,
+            xreg=fourier(ts_load,
+            K=c(2,24),
+            h=n_for+1),
+            h=n_for+1 
+            )
+plot(AF24_jul_for)
+
+#Model 9: SNaive
+SN_jul <- snaive(ts_load)
+SN_jul_for <- forecast(SN_jul, h = n_for+1)
+plot(SN_jul_for)
+
+#Model 10: NN K=c(2,12)
+NN12_jul <- nnetar(ts_load,
+                  p=1,
+                  P=0,
+                  xreg=fourier(ts_load, K=c(2,12)))
+NN12_jul_for <- forecast(NN12_jul, h=n_for+1,xreg=fourier(ts_load,K=c(2,12),h=n_for+1))
+autoplot(NN12_jul_for)
+
+#Model 12: STL
+STL_jul <- stl(ts_load, s.window = "periodic", robust = TRUE)
+STL_jul_for <- forecast(STL_jul, h = n_for+1)
+autoplot(STL_jul_for)
+
 ```
 
 ## CREATE AN EXCEL FILE WITH FORECAST
@@ -439,6 +498,25 @@ write.csv(SSES_for, file="./Output/submission_sses.csv", row.names = FALSE)
 ETS_for <- data.frame(date=date_for,load=round(ETS_jul$mean,digits=0))
 write.csv(ETS_for, file="./Output/submission_ets.csv", row.names = FALSE)
 
+#creating A+F K=2,12 csv
+AF12_for <- data.frame(date=date_for,load=round(AF12_jul_for$mean,digits=0))
+write.csv(AF12_for, file="./Output/submission_af12.csv", row.names = FALSE)
+
+#creating A+F K=2,24 csv
+AF24_for <- data.frame(date=date_for,load=round(AF24_jul_for$mean,digits=0))
+write.csv(AF24_for, file="./Output/submission_af24.csv", row.names = FALSE)
+
+#creating SNaive csv
+SN_for <- data.frame(date=date_for,load=round(SN_jul_for$mean,digits=0))
+write.csv(SN_for, file="./Output/submission_sn_vw.csv", row.names = FALSE)
+
+#creatin NN12 csv
+NN12_for <- data.frame(date=date_for,load=round(NN12_jul_for$mean,digits=0))
+write.csv(NN12_for, file="./Output/submission_nn12.csv", row.names = FALSE)
+
+#creating STL csv
+STL_for <- data.frame(date=date_for,load=round(STL_jul_for$mean,digits=0))
+write.csv(STL_for, file="./Output/submission_stl.csv", row.names = FALSE)
 ```
 
 ## SUBMIT FORECAST TO KAGGLE
