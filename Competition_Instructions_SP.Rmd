@@ -236,6 +236,10 @@ ts_load_test <- subset(ts_load,start= length(ts_load)-n_for+1)
 
 autoplot(ts_load_train)
 autoplot(ts_load_test)
+
+ts_temp_train <- subset(ts_temp,end = length(ts_temp)-n_for)
+ts_temp_test <- subset(ts_temp,start= length(ts_temp)-n_for+1)
+
 ```
 
 
@@ -284,6 +288,21 @@ Model10 <- nnetar(ts_load_train,
 
 #Model12
 Model12 <- stl(ts_load_train, s.window = "periodic", robust = TRUE)
+
+#Model13
+Model13<- nnetar(ts_load_train,
+                  p=1,
+                  P=0,
+                  xreg=fourier(ts_load_train, K=c(2,18)))
+
+#Model14
+
+xreg14 <- as.matrix(data.frame(fourier(ts_load_train, K=c(2,24)),"temp"=ts_temp_train))
+
+Model14<-auto.arima(ts_load_train,
+                    seasonal=FALSE,
+                    xreg=xreg14) 
+
 
 
 
@@ -355,13 +374,28 @@ Model12_for <- forecast(Model12, h = n_for)
 autoplot(Model12_for)
 Model12_score <- accuracy(Model12_for$mean, ts_load_test)
 
+#NN K=2,24
+Model13_for <- forecast(Model13, h=n_for,xreg=fourier(ts_load_train,K=c(2,18),h=n_for))
+autoplot(Model13_for)
+Model13_score <- accuracy(Model10_for$mean, ts_load_test)
+
+#AF with temp
+temp_forecast_14<-forecast(ts_temp_train, h=n_for)
+
+xreg14_for<-as.matrix(data.frame(fourier(ts_load_train, K=c(2,24), h=n_for), "temp"=temp_forecast_14$mean))
+
+Model14_for<-forecast(Model14,
+                      xreg=xreg14_for,
+                      h=n_for)
+Model14_score <- accuracy(Model14_for$mean, ts_load_test)
+
 ```
 
 
 ```{r}
 #creating data frame of all the model scores
-all_scores <- as.data.frame(rbind(SES_score, SSES_score, ETS_score, Model7_score, Model8_score, Model9_score, Model10_score, Model12_score))
-row.names(all_scores) <- c("SES", "SSES", "STL+ETS", "A+F,K=c(2,12)", "A+F,K=c(2,24)", "SNaive", "NN K=c(2,12)", "STL")
+all_scores <- as.data.frame(rbind(SES_score, SSES_score, ETS_score, Model7_score, Model8_score, Model9_score, Model10_score, Model12_score, Model13_score, Model14_score))
+row.names(all_scores) <- c("SES", "SSES", "STL+ETS", "A+F,K=c(2,12)", "A+F,K=c(2,24)", "SNaive", "NN K=c(2,12)", "STL", "NN K=c(2,18)", "A+F+Temp,K=(2,24)")
 
 ```
 
@@ -458,6 +492,22 @@ STL_jul <- stl(ts_load, s.window = "periodic", robust = TRUE)
 STL_jul_for <- forecast(STL_jul, h = n_for+1)
 autoplot(STL_jul_for)
 
+#Model 14: arima + fourier, K=c(2,24)
+xreg_af24_temp <- as.matrix(data.frame(fourier(ts_load, K=c(2,24)),"temp"=ts_temp))
+
+AF24_temp_jul<-auto.arima(ts_load,
+                    seasonal=FALSE,
+                    xreg=xreg_af24_temp)
+
+temp_forecast_jul_af24<-forecast(ts_temp, h=n_for+1)
+
+xreg_af24_temp_for<-as.matrix(data.frame(fourier(ts_load, K=c(2,24), h=n_for+1), "temp"=temp_forecast_jul_af24$mean))
+
+AF24_temp_jul_for<-forecast(AF24_temp_jul,
+                      xreg=xreg_af24_temp_for,
+                      h=n_for+1)
+
+
 ```
 
 ## CREATE AN EXCEL FILE WITH FORECAST
@@ -517,6 +567,10 @@ write.csv(NN12_for, file="./Output/submission_nn12.csv", row.names = FALSE)
 #creating STL csv
 STL_for <- data.frame(date=date_for,load=round(STL_jul_for$mean,digits=0))
 write.csv(STL_for, file="./Output/submission_stl.csv", row.names = FALSE)
+
+#creating A+F+temp
+AF24_temp_for <- data.frame(date=date_for,load=round(AF24_temp_jul_for$mean,digits=0))
+write.csv(STL_for, file="./Output/submission_af24_temp.csv", row.names = FALSE)
 ```
 
 ## SUBMIT FORECAST TO KAGGLE
