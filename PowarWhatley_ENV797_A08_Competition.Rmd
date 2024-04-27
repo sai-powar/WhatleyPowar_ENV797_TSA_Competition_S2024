@@ -240,6 +240,9 @@ autoplot(ts_load_test)
 ts_temp_train <- subset(ts_temp,end = length(ts_temp)-n_for)
 ts_temp_test <- subset(ts_temp,start= length(ts_temp)-n_for+1)
 
+ts_hum_train <- subset(ts_humidity,end = length(ts_humidity)-n_for)
+ts_hum_test <- subset(ts_humidity,start= length(ts_humidity)-n_for+1)
+
 ```
 
 
@@ -289,11 +292,6 @@ Model10 <- nnetar(ts_load_train,
 #Model12
 Model12 <- stl(ts_load_train, s.window = "periodic", robust = TRUE)
 
-#Model13
-Model13<- nnetar(ts_load_train,
-                  p=1,
-                  P=0,
-                  xreg=fourier(ts_load_train, K=c(2,18)))
 
 #Model14
 
@@ -303,7 +301,18 @@ Model14<-auto.arima(ts_load_train,
                     seasonal=FALSE,
                     xreg=xreg14) 
 
+#Model15
+Model15<- nnetar(ts_load_train,
+                  p=1,
+                  P=0,
+                  xreg=fourier(ts_load_train, K=c(2,6)))
 
+#Model16
+xreg16 <- as.matrix(data.frame(fourier(ts_load_train, K=c(2,14)),"temp"=ts_temp_train, "hum"=ts_hum_train))
+
+Model16<-auto.arima(ts_load_train,
+                    seasonal=FALSE,
+                    xreg=xreg16)
 
 
 ```
@@ -374,11 +383,6 @@ Model12_for <- forecast(Model12, h = n_for)
 autoplot(Model12_for)
 Model12_score <- accuracy(Model12_for$mean, ts_load_test)
 
-#NN K=2,24
-Model13_for <- forecast(Model13, h=n_for,xreg=fourier(ts_load_train,K=c(2,18),h=n_for))
-autoplot(Model13_for)
-Model13_score <- accuracy(Model10_for$mean, ts_load_test)
-
 #AF with temp
 temp_forecast_14<-forecast(ts_temp_train, h=n_for)
 
@@ -389,13 +393,33 @@ Model14_for<-forecast(Model14,
                       h=n_for)
 Model14_score <- accuracy(Model14_for$mean, ts_load_test)
 
+#Model 15
+Model15_for <- forecast(Model15, h=n_for,xreg=fourier(ts_load_train,K=c(2,6),h=n_for))
+autoplot(Model15_for)
+Model15_score <- accuracy(Model15_for$mean, ts_load_test)
+
+#Model 16
+temp_forecast_16<-forecast(ts_temp_train, h=n_for)
+hum_forecast_16<-forecast(ts_hum_train,h=n_for)
+
+xreg16_for<-as.matrix(data.frame(fourier(ts_load_train, K=c(2,14), h=n_for), "temp"=temp_forecast_16$mean,"hum"=hum_forecast_16$mean))
+
+Model16_for<-forecast(Model16,
+                      xreg=xreg16_for,
+                      h=n_for)
+Model16_score <- accuracy(Model16_for$mean, ts_load_test)
+
+#Model 17
+#Model17 <- tbats(ts_load_train)
+#Model17_score <- forecast(Model17, h=n_for)
+
 ```
 
 
 ```{r}
 #creating data frame of all the model scores
-all_scores <- as.data.frame(rbind(SES_score, SSES_score, ETS_score, Model7_score, Model8_score, Model9_score, Model10_score, Model12_score, Model13_score, Model14_score))
-row.names(all_scores) <- c("SES", "SSES", "STL+ETS", "A+F,K=c(2,12)", "A+F,K=c(2,24)", "SNaive", "NN K=c(2,12)", "STL", "NN K=c(2,18)", "A+F+Temp,K=(2,24)")
+all_scores <- as.data.frame(rbind(SES_score, SSES_score, ETS_score, Model7_score, Model8_score, Model9_score, Model10_score, Model12_score, Model14_score, Model15_score, Model16_score))
+row.names(all_scores) <- c("SES", "SSES", "STL+ETS", "A+F,K=c(2,12)", "A+F,K=c(2,24)", "SNaive", "NN K=c(2,12)", "STL", "A+F+Temp,K=(2,24)", "NN K=c(2,6)", "A+F+Temp+Hum,K=c(2,14)")
 
 ```
 
@@ -512,6 +536,13 @@ test_f <- data.frame(date=date_for,load=round(combined_forecast23,digits=0))
 colnames(test_f)[1] <- "date"
 write.csv(test_f , file="./Output/submission_test.csv", row.names = FALSE)
 
+#Model15
+NN6_jul <- nnetar(ts_load,
+                  p=1,
+                  P=0,
+                  xreg=fourier(ts_load, K=c(2,6)))
+NN6_jul_for <- forecast(NN6_jul, h=n_for+1,xreg=fourier(ts_load,K=c(2,6),h=n_for+1))
+autoplot(NN6_jul_for)
 ```
 
 ## CREATE AN EXCEL FILE WITH FORECAST
@@ -580,6 +611,10 @@ write.csv(STL_for, file="./Output/submission_af24_temp.csv", row.names = FALSE)
 test_f <- data.frame(date=date_for,load=round(combined_forecast23,digits=0))
 colnames(test_f)[1] <- "date"
 write.csv(test_f , file="./Output/submission_test.csv", row.names = FALSE)
+
+#creating NN6 csv
+NN6_for <- data.frame(date=date_for,load=round(NN6_jul_for$mean,digits=0))
+write.csv(NN6_for, file="./Output/submission_nn6.csv", row.names = FALSE)
 ```
 
 ## SUBMIT FORECAST TO KAGGLE
