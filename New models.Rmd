@@ -17,7 +17,6 @@ knitr::opts_chunk$set(echo = TRUE,tidy.opts=list(width.cutoff=80), tidy=FALSE)
 ```{r package, message=FALSE}
 library(dplyr)
 library(KFAS)
-install.packages("KFAS")
 library(tidyr)
 library(lubridate)
 library(ggplot2)
@@ -32,21 +31,15 @@ library(KernSmooth)
 #install.packages("smooth")
 library(smooth)
 library(kableExtra)
-library(keras)
-library(tibble)
-library(fpp3)
-install.packages("reticulate")
-reticulate::install_tensorflow()
-reticulate::py_install("tensorflow")
-install("tensorflow")
+
+install.packages("gbm")
+library(gbm)
 ```
 
 ```{r}
 #change file path for data as necessary
-raw_load <- read.csv(file="Data_TOPOST/converting files to csv/temperature.csv", header = TRUE, dec = ".", sep=",") 
-
+raw_load <- read.csv(file="Data_TOPOST/converting files to csv/load.csv", header = TRUE, dec = ".", sep=",") #na.strings = c("","NA")) 
 raw_temp <- read.csv(file="Data_TOPOST/converting files to csv/temperature.csv", header = TRUE, dec = ".", sep=",")
-
 raw_humidity <- read.csv(file="Data_TOPOST/converting files to csv/relative_humidity.csv", header = TRUE, dec = ".", sep=",")
 ```
 
@@ -328,5 +321,160 @@ forecast_GP <- predict(Model_12, x = seq_along(ts_load_train) + n_for)
 plot(ts_load_train)
 lines(seq_along(ts_load_train) + n_for, forecast_GP$y, col = "red")
 
+```
+
+```{r}
+#Code chunck to copy to main documents
+
+temp_load_data <- merge(temp, load, by = "date")
+ts_temp_load <- ts(temp_load_data$daily_temp, start = start(temp_load_data$date), frequency = 12)
+#decompose
+ts_temp_load %>% mstl() %>%
+  autoplot()
+
+
+
+#creating subset for training purposes
+
+n_for = 30
+
+ts_temp_load_train <- subset(ts_temp_load,end = length(ts_temp_load)-n_for)
+ts_temp_load_test <- subset(ts_temp_load,start= length(ts_temp_load)-n_for+1)
+
+# Model15
+Model15 <- snaive(ts_temp_load_train)
+checkresiduals(Model15)
+
+#Model 15: Seasonal naive
+Model15 <- snaive(ts_temp_load_train,h=n_for+1)
+summary(Model2)
+
+plot(Model2)
+
+###only competition submissions
+#creating Model 15 csv
+forecast_values <- as.numeric(ts_temp_load_train)
+forecast_mean <- mean(forecast_values)
+forecast_values <- as.numeric(ts_temp_load_train$mean)
+model15_for <- data.frame(date = date_for, load = round(forecast_mean, digits = 0))
+write.table(model15_for, file = "./Output/submission_model15_mean.csv", sep = ",", row.names = FALSE, col.names = FALSE)
+
+
+
+#Model 16
+
+# Split data into training and testing sets
+
+train_data2 <- data2[1:100, ]
+test_data2 <- data2[101:nrow(data2), ]
+
+# Train forecasting models
+model16A <- auto.arima(t1$target_variable1)
+model16B <- auto.arima(train_data2$target_variable2)
+
+
+
+# Forecast
+Hum1 <- forecast(ts_humidity, h = n_for+1)
+load1 <- forecast(ts_load_train, h = n_for+1)
+# Example data (replace with your actual data)
+data <- c(
+    NA, 3986.490, NA, 3906.826, NA, 3623.044, NA, 4064.671, NA, 4288.480, NA, 4428.209, NA, 4400.410, NA, 4493.735, NA, 4441.833,
+    NA, 4117.915, NA, 4250.049, NA, 4333.863, NA, 4294.096, NA, 4259.338, NA, 4200.482, NA, 4159.950, NA, 3949.760, NA, 4306.535,
+    NA, 4481.709, NA, 4514.760, NA, 4493.602, NA, 4564.855, NA, 4545.191, NA, 4357.348, NA, 4707.352, NA, 4887.643, NA, 4828.035,
+    NA, 4786.027, NA, 4591.777, NA, 4356.811, 63.23851, 3941.750, 60.69150, NA, 63.11973, NA, 66.43072, NA, 70.81117, NA, 71.83559,
+    NA, 65.17322, NA, 69.26553, NA, 72.14252, NA, 74.40633, NA, 71.91633, NA, 71.19187, NA, 75.63596, NA, 71.22921, NA, 70.05341,
+    NA, 70.27546, NA, 73.64641, NA, 72.69028, NA, 71.17887, NA, 70.66106, NA, 67.38333, NA, 70.10814, NA, 72.67083, NA, 73.07560,
+    NA, 71.66364, NA, 70.04604, NA, 74.96890, NA, 73.58844, NA, 77.17688, NA, 72.97545, NA, 75.23126
+)
+
+# Separate data into two variables
+Hum1_mean <- data[seq(1, length(data), by = 2)]  # Extract every other value
+load1_mean <- data[seq(2, length(data), by = 2)] # Extract every other value starting from index 2
+
+# Remove NA values
+Hum1_mean <- Hum1_mean[!is.na(Hum1_mean)]
+load1_mean <- load1_mean[!is.na(load1_mean)]
+
+# Print the separated variables
+print(Hum1_mean)
+print(load1_mean)
+combined_forecast <- cbind(Hum1_mean, load1_mean)
+plot(combined_forecast)
+combined_for <- data.frame(date=date_for,load=round(ETS_jul$mean,digits=0))
+write.csv(ETS_for, file="./Output/submission_ets.csv", row.names = FALSE)
+```
+
+```{r}
+#only competition submissions
+
+# Weighted average of ETS and SN forecasts
+combined_forecast23 <- (0.5 * ETS_jul$mean + 0.5 * SN_jul_for$mean)
+test_f <- data.frame(date=date_for,load=round(combined_forecast23,digits=0))
+colnames(test_f)[1] <- "date"
+write.csv(test_f , file="./Output/submission_test.csv", row.names = FALSE)
+
+#creating STL csv
+test_f <- data.frame(date=date_for,load=round(combined_forecast23,digits=0))
+colnames(test_f)[1] <- "date"
+write.csv(test_f , file="./Output/submission_test.csv", row.names = FALSE)
+```
+
+```{r}
+#only competition submissions
+length(date_for)
+length(combined_forecast_NNETS)
+
+# Determine the length difference between ETS_jul and NN12_jul
+length_diff <- length(NN12_jul) - length(ETS_jul)
+
+# Extend ETS_jul to match the length of NN12_jul
+ETS_jul_extended <- c(ETS_jul, rep(ETS_jul[length(ETS_jul)], length_diff))
+
+# Calculate the mean of ETS_jul_extended
+mean_ETS_jul_extended <- mean(ETS_jul_extended$mean)
+
+# Calculate the weighted average of the extended ETS_jul and NN12_jul forecasts
+combined_forecast_NNETS <- 0.5 * mean_ETS_jul_extended + 0.5 * NN12_jul$mean
+
+model17 <- data.frame(date=date_for,load=round(combined_forecast_NNETS,digits=0))
+colnames(test_f)[1] <- "date"
+write.csv(test_f , file="./Output/submission_test.csv", row.names = FALSE)
+
+#creating STL csv
+test_f <- data.frame(date=date_for,load=round(combined_forecast23,digits=0))
+colnames(test_f)[1] <- "date"
+write.csv(test_f , file="./Output/submission_test.csv", row.names = FALSE)
+```
+
+```{r}
+# Weighted average of ETS and SN forecasts
+combined_forecast24 <- (0.5 * ETS_jul$mean + 0.5 * SN_jul_for$mean)
+test_f1 <- data.frame(date=date_for,load=round(combined_forecast24,digits=0))
+colnames(test_f1)[1] <- "date"
+write.csv(test_f1 , file="./Output/submission_test.csv", row.names = FALSE)
+
+#creating STL csv
+test_f <- data.frame(date=date_for,load=round(combined_forecast23,digits=0))
+colnames(test_f)[1] <- "date"
+write.csv(test_f , file="./Output/submission_test.csv", row.names = FALSE)
+```
+
+```{r}
+# Example of training a GBM model
+gbm_model <- gbm(load ~ ., data = ts_load_train, 
+                 distribution = "gaussian", n.trees = 100, interaction.depth = 3)
+
+# Example of evaluating the GBM model
+predictions <- predict(gbm_model, newdata = ts_load_train, n.trees = 100)
+mse <- mean((predictions - ts_load_train)^2)
+
+# Example of hyperparameter tuning
+tuned_gbm_model <- gbm(target_variable ~ ., data = ts_load_train, 
+                       distribution = "gaussian", n.trees = 100, 
+                       interaction.depth = 3, 
+                       cv.folds = 5, 
+                       n.cores = NULL)
+plot(tuned_gbm_model)
 ```
 
