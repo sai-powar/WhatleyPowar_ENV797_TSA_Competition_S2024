@@ -3,6 +3,7 @@ title: 'TSA: Forecasting Competition Instructions'
 author: "Sai Powar & Vinny Whatley"
 date: "03/20/2024"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
 always_allow_html: true
@@ -532,11 +533,7 @@ xreg_af24_temp_for<-as.matrix(data.frame(fourier(ts_load, K=c(2,24), h=n_for+1),
 AF24_temp_jul_for<-forecast(AF24_temp_jul,
                       xreg=xreg_af24_temp_for,
                       h=n_for+1)
-# Weighted average of ETS and SN forecasts
-combined_forecast23 <- (0.5 * ETS_jul$mean + 0.5 * SN_jul_for$mean)
-test_f <- data.frame(date=date_for,load=round(combined_forecast23,digits=0))
-colnames(test_f)[1] <- "date"
-write.csv(test_f , file="./Output/submission_test.csv", row.names = FALSE)
+
 
 #Model15
 NN6_jul <- nnetar(ts_load,
@@ -617,6 +614,15 @@ write.csv(test_f , file="./Output/submission_test.csv", row.names = FALSE)
 #creating NN6 csv
 NN6_for <- data.frame(date=date_for,load=round(NN6_jul_for$mean,digits=0))
 write.csv(NN6_for, file="./Output/submission_nn6.csv", row.names = FALSE)
+```
+
+```{r}
+# Weighted average of ETS and SN forecasts
+combined_forecast23 <- (0.5 * ETS_jul$mean + 0.5 * SN_jul_for$mean)
+test_f <- data.frame(date=date_for,load=round(combined_forecast23,digits=0))
+colnames(test_f)[1] <- "date"
+write.csv(test_f , file="./Output/submission_test.csv", row.names = FALSE)
+
 ```
 
 ## SUBMIT FORECAST TO KAGGLE
